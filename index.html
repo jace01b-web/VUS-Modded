@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VUS Chat</title>
+<title>VUS Chat Modded</title>
 <meta name="theme-color" content="#070b16">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1122,6 +1122,21 @@ button{font-family:inherit}button:focus-visible,input:focus-visible,textarea:foc
   #joinCard{padding:26px 20px 22px;border-radius:24px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* ── fixes/additions (modded) ── */
+.chat-header{z-index:60!important}
+#onlineListPanel{z-index:70!important;background:rgba(15,23,42,.99)!important;max-height:320px!important}
+#mentionDropdown{width:min(300px,calc(100vw - 36px))!important;max-height:260px;padding:6px!important;z-index:80!important;background:rgba(15,23,42,.99)!important}
+.mention-head{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7f8aa1;padding:6px 10px 4px}
+.mention-option{display:flex!important;align-items:center;gap:10px}
+.mention-option.active{background:rgba(34,197,94,.16)!important}
+.mention-av{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:800;color:#06090f;background:linear-gradient(135deg,#22c55e,#67e8f9)}
+.mention-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mention-nm mark{background:none;color:#86efac;font-weight:700}
+.mention-ic{flex:none;font-size:12px}
+.mention-hint{font-size:11px;color:#64748b;padding:6px 10px 2px;border-top:1px solid rgba(255,255,255,.06);margin-top:4px}
+.vus-credit{text-align:center;font-size:11.5px;color:#7f8aa1;padding:2px 12px 8px;letter-spacing:.02em}
+.vus-credit b{color:#86efac;font-weight:700}
 </style>
 </head>
 <body>
@@ -1132,7 +1147,7 @@ button{font-family:inherit}button:focus-visible,input:focus-visible,textarea:foc
     <span id="onlineCount" class="online-count"></span>
     <div id="onlineListPanel" style="display:none;position:absolute;top:28px;left:-10px;background:#1e293b;border:1.5px solid #334155;border-radius:10px;padding:12px;z-index:10;width:220px;font-size:14px;font-weight:400;max-height:280px;overflow-y:auto"></div>
   </div>
-  <div class="hdr-title">VUS Chat</div>
+  <div class="hdr-title" title="Made by Suki, the owner of 'Itsukis Chat Hub'">VUS Chat Modded</div>
   <div class="hdr-right">
     <button id="roomsToggleBtn">🚪 Rooms<span class="rooms-badge-dot" id="roomsBadgeDot"></span></button>
     <span id="youAreAvatar" class="you-avatar" aria-label="Your profile picture"></span>
@@ -1391,6 +1406,7 @@ button{font-family:inherit}button:focus-visible,input:focus-visible,textarea:foc
     </div>
     <button id="sendBtn">Send</button>
   </div>
+  <div class="vus-credit">Made by <b>Suki</b>, the owner of &lsquo;Itsukis Chat Hub&rsquo;</div>
 </div>
 
 <audio id="pingSound" preload="auto"></audio>
@@ -5845,49 +5861,125 @@ function closeMentionDropdown() {
   $mentionDropdown.innerHTML = "";
 }
 
+let mentionQuery = "";
+let mentionActive = 0;
+let mentionMatches = [];
+
+function pickMention(name) {
+  setMention(name);
+  if (mentionTriggerCharIndex >= 0) {
+    const cursor = Math.max($msgInput.selectionStart, mentionTriggerCharIndex);
+    const before = $msgInput.value.slice(0, mentionTriggerCharIndex);
+    const after = $msgInput.value.slice(cursor);
+    $msgInput.value = before + after;
+    $msgInput.selectionStart = $msgInput.selectionEnd = before.length;
+  }
+  closeMentionDropdown();
+  $msgInput.focus();
+  autosizeInput();
+  updateCharCounter();
+}
+
+function highlightMentionRow() {
+  [...$mentionDropdown.querySelectorAll(".mention-option")].forEach((el, i) => {
+    el.classList.toggle("active", i === mentionActive);
+    if (i === mentionActive) el.scrollIntoView({ block: "nearest" });
+  });
+}
+
 function renderMentionDropdown() {
   $mentionDropdown.innerHTML = "";
+  const q = mentionQuery.toLowerCase();
 
-  const candidates = latestPresenceList
+  const all = latestPresenceList
     .map(e => e.name)
     .filter(name => name !== myName && !isSpectatorName(name))
     .sort((a, b) => a.localeCompare(b));
 
-  if (candidates.length === 0) {
+  // Names that START with what you typed come first, then names that merely contain it.
+  const starts = all.filter(n => n.toLowerCase().startsWith(q));
+  const contains = q ? all.filter(n => !n.toLowerCase().startsWith(q) && n.toLowerCase().includes(q)) : [];
+  mentionMatches = starts.concat(contains);
+  if (mentionActive >= mentionMatches.length) mentionActive = 0;
+
+  if (all.length === 0 || mentionMatches.length === 0) {
     const empty = document.createElement("div");
     empty.className = "mention-empty";
-    empty.textContent = "No one else online to mention.";
+    empty.textContent = all.length === 0 ? "No one else online to mention." : "No one online matches \u201c" + mentionQuery + "\u201d.";
     $mentionDropdown.appendChild(empty);
     return;
   }
 
-  candidates.forEach(name => {
+  const head = document.createElement("div");
+  head.className = "mention-head";
+  head.textContent = q ? "Members matching @" + mentionQuery : "Members online";
+  $mentionDropdown.appendChild(head);
+
+  mentionMatches.forEach((name, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "mention-option";
-    btn.textContent = name;
-    btn.addEventListener("click", () => {
-      setMention(name);
-      if (mentionTriggerCharIndex >= 0) {
-        const before = $msgInput.value.slice(0, mentionTriggerCharIndex);
-        const after = $msgInput.value.slice($msgInput.selectionStart);
-        $msgInput.value = before + after;
-        $msgInput.selectionStart = $msgInput.selectionEnd = before.length;
-      }
-      closeMentionDropdown();
-      $msgInput.focus();
-      updateCharCounter();
-    });
+    btn.className = "mention-option" + (i === mentionActive ? " active" : "");
+
+    const av = document.createElement("span");
+    av.className = "mention-av";
+    av.textContent = (name.trim()[0] || "?").toUpperCase();
+
+    const nm = document.createElement("span");
+    nm.className = "mention-nm";
+    const idx = q ? name.toLowerCase().indexOf(q) : -1;
+    if (idx >= 0) {
+      nm.appendChild(document.createTextNode(name.slice(0, idx)));
+      const m = document.createElement("mark");
+      m.textContent = name.slice(idx, idx + q.length);
+      nm.appendChild(m);
+      nm.appendChild(document.createTextNode(name.slice(idx + q.length)));
+    } else {
+      nm.textContent = name;
+    }
+
+    const safeName = ChatBackend._safeKey(name);
+    const icons = Object.values(ROLES).filter(role => (roleHolders[role.id] || new Set()).has(safeName)).map(role => role.icon).join(" ");
+    const ic = document.createElement("span");
+    ic.className = "mention-ic";
+    ic.textContent = icons;
+
+    btn.append(av, nm, ic);
+    // mousedown (not click) so the input never loses focus/selection before we insert
+    btn.addEventListener("mousedown", (e) => { e.preventDefault(); pickMention(name); });
+    btn.addEventListener("mouseenter", () => { mentionActive = i; highlightMentionRow(); });
     $mentionDropdown.appendChild(btn);
   });
+
+  const hint = document.createElement("div");
+  hint.className = "mention-hint";
+  hint.textContent = "\u2191\u2193 to move \u00b7 Tab or Enter to pick \u00b7 Esc to close";
+  $mentionDropdown.appendChild(hint);
 }
 
-function openMentionDropdown(triggerIndex) {
+function openMentionDropdown(triggerIndex, query) {
   mentionDropdownMode = "mention";
   mentionTriggerCharIndex = triggerIndex;
+  const newQ = query || "";
+  if (!mentionDropdownOpen || newQ !== mentionQuery) mentionActive = 0;
+  mentionQuery = newQ;
   mentionDropdownOpen = true;
   $mentionDropdown.style.display = "block";
   renderMentionDropdown();
+}
+
+// Arrow keys / Tab / Enter / Esc while the @ list is open. True = key consumed.
+function handleMentionKeydown(e) {
+  if (!mentionDropdownOpen || mentionDropdownMode !== "mention") return false;
+  if (e.key === "Escape") { e.preventDefault(); closeMentionDropdown(); return true; }
+  if (!mentionMatches.length) return false;
+  if (e.key === "ArrowDown") { e.preventDefault(); mentionActive = (mentionActive + 1) % mentionMatches.length; highlightMentionRow(); return true; }
+  if (e.key === "ArrowUp") { e.preventDefault(); mentionActive = (mentionActive - 1 + mentionMatches.length) % mentionMatches.length; highlightMentionRow(); return true; }
+  if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+    e.preventDefault();
+    pickMention(mentionMatches[mentionActive] || mentionMatches[0]);
+    return true;
+  }
+  return false;
 }
 
 function openModerationTargetDropdown(tokenStart) {
@@ -5940,7 +6032,7 @@ function refreshMentionDropdownIfOpen() {
 
 $mentionChip.addEventListener("click", (e) => {
   e.stopPropagation();
-  openMentionDropdown(-1);
+  openMentionDropdown(-1, "");
 });
 
 document.addEventListener("click", (e) => {
@@ -6114,10 +6206,13 @@ function handleMentionTrigger() {
     openModerationTargetDropdown(cursor - moderationMatch[1].length);
     return;
   }
-  const charBeforeCursor = $msgInput.value.slice(cursor - 1, cursor);
-  if (charBeforeCursor === "@") {
-    openMentionDropdown(cursor - 1);
+  // Discord-style: "@" at the start or after a space, then whatever you've typed filters the list live.
+  const atMatch = before.match(/(?:^|\s)@([^\s@]{0,32})$/);
+  if (atMatch) {
+    openMentionDropdown(cursor - atMatch[1].length - 1, atMatch[1]);
+    return;
   }
+  if (mentionDropdownOpen && mentionDropdownMode === "mention" && mentionTriggerCharIndex >= 0) closeMentionDropdown();
 }
 
 let pingSoundReady = false;
@@ -6832,6 +6927,7 @@ $changeNameBtn.addEventListener("click", openChangeName);
 
 $sendBtn.addEventListener("click", sendMessage);
 $msgInput.addEventListener("keydown", e => {
+  if (handleMentionKeydown(e)) return;
   if (handleCommandKeydown(e)) return;
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
