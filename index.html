@@ -1132,7 +1132,7 @@ button{font-family:inherit}button:focus-visible,input:focus-visible,textarea:foc
     <span id="onlineCount" class="online-count"></span>
     <div id="onlineListPanel" style="display:none;position:absolute;top:28px;left:-10px;background:#1e293b;border:1.5px solid #334155;border-radius:10px;padding:12px;z-index:10;width:220px;font-size:14px;font-weight:400;max-height:280px;overflow-y:auto"></div>
   </div>
-  <div class="hdr-title">VUS Chat • Modded</div>
+  <div class="hdr-title">VUS Chat</div>
   <div class="hdr-right">
     <button id="roomsToggleBtn">🚪 Rooms<span class="rooms-badge-dot" id="roomsBadgeDot"></span></button>
     <span id="youAreAvatar" class="you-avatar" aria-label="Your profile picture"></span>
@@ -6945,6 +6945,36 @@ function init() {
 
 init();
 </script>
-<script src="https://raw.githubusercontent.com/jace01b-web/VUS-Modded/refs/heads/main/modmenu.js"></script>
+<script>
+/* Loads the mod menu from the raw GitHub file. raw.githubusercontent.com serves files as
+   text/plain (blocked as a <script src>), so we fetch the text and run it as an inline script. */
+(function loadModMenu(){
+  var RAW="https://raw.githubusercontent.com/jace01b-web/VUS-Modded/refs/heads/main/modmenu.js";
+  function run(code){
+    var el=document.createElement("script");
+    el.textContent=code+"\n//# sourceURL=modmenu.js";
+    document.body.appendChild(el);
+    openMenu();
+  }
+  function openMenu(){
+    try{ if(window.VUSMod&&window.VUSMod.open) window.VUSMod.open(); }
+    catch(e){ console.warn("[VUS] Could not auto-open mod menu:",e); }
+  }
+  function viaTag(src){
+    var el=document.createElement("script");
+    el.src=src;
+    el.onload=openMenu;
+    el.onerror=function(){console.warn("[VUS] Mod menu failed to load from",src);};
+    document.body.appendChild(el);
+  }
+  fetch(RAW+"?t="+Date.now(),{cache:"no-store"})
+    .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text();})
+    .then(run)
+    .catch(function(e){
+      console.warn("[VUS] Raw mod menu fetch failed ("+e.message+"), trying local modmenu.js");
+      viaTag("modmenu.js");
+    });
+})();
+</script>
 </body>
 </html>
