@@ -6942,6 +6942,24 @@ $msgInput.addEventListener("input", () => {
   handleMentionTrigger();
 });
 
+// Type-anywhere: if you start typing while the message box isn't focused, jump into it.
+// Focusing during keydown means the key you pressed still lands in the box.
+document.addEventListener("keydown", (e) => {
+  if (e.defaultPrevented || e.isComposing) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;            // shortcuts (Ctrl+C, Alt+M...) stay shortcuts
+  if (e.key.length !== 1) return;                             // only real characters, not arrows/F-keys/etc.
+  const t = e.target;
+  if (t && (t === $msgInput || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if (t && t.closest && t.closest("a,button,[role=button]") && (e.key === " ")) return;  // Space activates a focused button
+  if ($msgInput.disabled || !$msgInput.offsetParent) return;  // not joined / banned / join screen showing
+  // a dialog is open (these overlays always exist in the page, so only count VISIBLE ones)
+  for (const ov of document.querySelectorAll(".chat-modal-overlay")) {
+    if (getComputedStyle(ov).display !== "none") return;
+  }
+  if (window.getSelection && String(window.getSelection()).length) return;  // don't steal a text selection being copied
+  $msgInput.focus();
+}, true);
+
 $msgInput.addEventListener("paste", (e) => {
   if (!canPostImages()) return;
 
