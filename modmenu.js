@@ -8,7 +8,7 @@
 const LS='vusMod1';
 const THEMES={Default:['#0f172a','#1e293b','#334155','#14532d','#166534','#f1f5f9','#22c55e'],Midnight:['#000','#0b0b14','#1c1c2e','#1a1a40','#33336b','#e5e7eb','#818cf8'],Dracula:['#282a36','#44475a','#6272a4','#3b3f5c','#bd93f9','#f8f8f2','#bd93f9'],Nord:['#2e3440','#3b4252','#4c566a','#434c5e','#88c0d0','#eceff4','#88c0d0'],Matrix:['#000','#001a00','#003300','#003b00','#00aa00','#00ff41','#00ff41'],Sunset:['#2b1020','#3d1a2e','#6b2d4a','#7a2e1d','#c2410c','#fde8d8','#fb923c'],Ocean:['#06202b','#0a3446','#116466','#0e4d64','#1d8aa6','#e0f7fa','#22d3ee'],Rose:['#1f1017','#3a1c2a','#6b2c4a','#5b1a3a','#be185d','#ffe4ef','#f472b6'],Solar:['#002b36','#073642','#586e75','#0b4a4a','#2aa198','#eee8d5','#b58900'],Light:['#f1f5f9','#ffffff','#cbd5e1','#bbf7d0','#86efac','#0f172a','#16a34a'],Contrast:['#000','#000','#fff','#000','#ff0','#fff','#ff0']};
 const mk=(s,v)=>Object.fromEntries(s.split(' ').map(k=>[k,v]));
-const D={...mk('hs hb ht cp gr bi hi zen ag cs cap lock dnd mp dn fl vib tts open kc fu',false),...mk('lk lb an snap launch ut fv emo ttsm far fpp nc nb nt fas ar own fin',true),
+const D={...mk('hs hb ht cp gr bi hi zen ag cs cap lock dnd mp dn fl vib tts open kc',false),...mk('lk lb an snap launch ut fv emo ttsm far fpp nc nb nt fas ar own fin',true),
 theme:'Default',font:'system-ui,Arial,sans-serif',v:2,fs:16,ms:12,mw:82,gap:12,zoom:1,bs:'round',br:100,warm:0,dim:.4,bg:'',ac:'',ccss:'',kw:'',cw:'',pre:'',suf:'',fuName:'',tf:'none',snd:'off',st:'blip',vol:70,rate:1,op:100,msc:1,
 muted:[],fr:[],hl:{},nick:{},snips:[],hist:[],pins:[],note:'',alias:{},away:false,awayMsg:"I'm away right now, back soon!",dup:false,pos:null,lpos:null};
 const BOOL=Object.keys(D).filter(k=>typeof D[k]==='boolean');
@@ -244,6 +244,16 @@ const credBox=(u,p)=>{const b=h('div',{className:'vp'});const line=(lbl,val)=>h(
 const doJoin=async(session,nickname)=>{try{if(typeof ChatBackend!=='undefined'&&ChatBackend.releasePresenceSilently&&myLoginId)ChatBackend.releasePresenceSilently()}catch(e){}
 try{await joinWithDmSession(session,nickname)}catch(e){toast('Logged in, but joining chat failed — try again from the chat screen.')}};
 const acctCard=(title,body)=>h('div',{className:'vcard'},h('b',{textContent:title}),body);
+const fakeUser=()=>{const box=h('div'),inp=h('input',{className:'vi',placeholder:'Any username (max 24 chars)',maxLength:24,value:S.fuName||''}),out=h('div',{className:'vn'});
+const go=async name=>{const s=loadDmSession();if(!s){out.textContent='Log in first.';return}
+name=(name||'').trim().slice(0,24);if(!name){out.textContent='Type a name first.';return}
+try{if(hasHiddenChars(name)){out.textContent='That name has hidden characters.';return}
+if(await ChatBackend.isNameTaken(name,s.id)){out.textContent='Someone online already has that name (or a lookalike).';return}}catch(e){}
+S.fuName=name;save();out.textContent='Switching to "'+name+'"…';
+try{logoutToNamePicker();await joinWithDmSession(s,name);out.textContent='You are now "'+name+'" in chat.'}catch(e){out.textContent='Failed: '+(e&&e.message||e)}};
+box.append(h('div',{className:'vn',textContent:'Really changes your chat name: you leave and rejoin as this name, so everyone sees it in the online list and on new messages. Your account (ID, roles, items) stays the same. Names someone else is using right now are refused.'}),inp,
+btn('🎭 Become this username',()=>go(inp.value)),
+btn('↩ Back to my real username',()=>{const s=loadDmSession();if(s)go(s.username)}),out);return box};
 const accountPanel=()=>{const box=h('div');
 const status=h('div',{className:'vp'});const refreshStatus=()=>{const s=curSession();status.textContent=s?('Logged in as '+s.username+'  ·  ID #'+s.id+(myName?'  ·  chat name "'+myName+'"':'')):'Not logged in on this browser.'};refreshStatus();
 
@@ -350,10 +360,6 @@ wrap('rebuildRoleHolders',o=>function(){inject();return o.apply(this,arguments)}
 /* Unlock all items (fake): your inventory shows every known item x99 on THIS browser only; the database is untouched */
 bw('watchInventory',o=>function(cb){return o.call(this,d=>{RAWINV=d||{};cb(invFake(RAWINV))})});
 wrap('renderInventory',o=>function(){safe(()=>{inventoryData=invFake(RAWINV)});return o.apply(this,arguments)});
-/* Fake user: messages you send show this name instead (no account ID attached, so no roles or colors are borrowed) */
-const fk=()=>S.fu&&(S.fuName||'').trim()?(S.fuName||'').trim().slice(0,32):'';
-bw('send',o=>function(n,t,mn,id){const f=fk();return f?o.call(this,f,t,mn,null):o.apply(this,arguments)});
-bw('sendImage',o=>function(n,d,id){const f=fk();return f?o.call(this,f,d,null):o.apply(this,arguments)});
 /* Stay in when chat is closed (this browser ignores the close signal) */
 bw('watchChatClosed',o=>function(cb){return o.call(this,c=>cb(S.kc?false:c))});
 let lastId='';setInterval(()=>{const id=myLoginId?String(myLoginId):'';if(id!==lastId){lastId=id;fakeSync();invSync()}},800);
@@ -410,7 +416,7 @@ Alerts:[['t','dnd','Do Not Disturb (silences everything here)'],['s','snd','Mess
 ['h','Away mode'],['t','away','Auto-reply once per person while away'],['i','awayMsg','Away message'],
 ['h','Safety'],['t','dup','Warn before sending the same message twice']],
 Staff:[['h','Chat'],['x',chatState],['t','kc','Stay in when chat is closed (ignore the close signal on this browser)'],['h','Fake perms (only you see these)'],['t','fin','Unlock all items (fake, on by default)',invSync],['t','far','Fake All Roles (every role badge on your name)',rfx.badge],['t','fpp','Fake pic perms (image button always on)',rfx.pics],['n','Cosmetic/local: they change what this browser shows and allows. The database and other people are not changed.'],['h','Items'],['x',itemsPanel],['x',staff]],
-Account:[['h','Fake user'],['t','fu','Send messages as a different username'],['i','fuName','Fake username (any name you want)'],['n','Only your sent messages change: they go out under that name with no account attached, so they have no role badge or custom color. Your real login and online-list name stay the same. Turn it off to send as yourself again.'],['h','Account protections (this browser)'],['t','nc','No cooldown (send delay, images, @pings)',rfx.cd],['t','nb','Ban immunity (ignore ban records on you)'],['t','nt','Timeout immunity (ignore timeouts on you)',rfx.tmo],['n','Applies to whichever account is logged in here. Turning Ban immunity off takes effect the next time the app checks your ban (e.g. on rejoin).'],['x',accountPanel]],
+Account:[['h','Fake username'],['x',fakeUser],['h','Account protections (this browser)'],['t','nc','No cooldown (send delay, images, @pings)',rfx.cd],['t','nb','Ban immunity (ignore ban records on you)'],['t','nt','Timeout immunity (ignore timeouts on you)',rfx.tmo],['n','Applies to whichever account is logged in here. Turning Ban immunity off takes effect the next time the app checks your ban (e.g. on rejoin).'],['x',accountPanel]],
 Commands:[['h','Local command console'],['x',consoleUI],['n','Works in the chat box too: start a message with ; (e.g. ;theme nord). Your own aliases: ;alias hi Hello everyone → then ;hi. Anything else you type is sent as normal; real /commands are handled by the app.']],
 People:[['n','Mute, nickname, highlight and ⭐ friends are local — only you see them. Friends trigger a toast when they join/leave.'],['x',people],['h','Muted'],['x',()=>listNode('muted',x=>'🔇 '+x+'  (click ✕ to unmute)',()=>{},'Nobody muted.')],['h','Friends'],['x',()=>listNode('fr',x=>'⭐ '+x,()=>{},'No friends starred.')]],
 Tools:[['h','Toolbox'],['x',toolbox],['h','Stopwatch'],['x',stopwatch],['h','Random picker'],['x',picker],['h','Quick actions'],['x',quick],['h','Notepad'],['a','note','',6],['b',[['Copy',()=>copy(S.note)],['Insert into message',()=>ins(S.note)]]],['h','Timer'],['x',timer],['h','Diagnostics'],['x',diag],['b',[['Force reconnect',()=>{try{firebase.database().goOffline();setTimeout(()=>firebase.database().goOnline(),600);toast('Reconnecting…')}catch(e){}}],['Scroll chat to bottom',()=>$messages.scrollTop=$messages.scrollHeight]]]],
