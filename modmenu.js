@@ -8,7 +8,7 @@
 const LS='vusMod1';
 const THEMES={Default:['#0f172a','#1e293b','#334155','#14532d','#166534','#f1f5f9','#22c55e'],Midnight:['#000','#0b0b14','#1c1c2e','#1a1a40','#33336b','#e5e7eb','#818cf8'],Dracula:['#282a36','#44475a','#6272a4','#3b3f5c','#bd93f9','#f8f8f2','#bd93f9'],Nord:['#2e3440','#3b4252','#4c566a','#434c5e','#88c0d0','#eceff4','#88c0d0'],Matrix:['#000','#001a00','#003300','#003b00','#00aa00','#00ff41','#00ff41'],Sunset:['#2b1020','#3d1a2e','#6b2d4a','#7a2e1d','#c2410c','#fde8d8','#fb923c'],Ocean:['#06202b','#0a3446','#116466','#0e4d64','#1d8aa6','#e0f7fa','#22d3ee'],Rose:['#1f1017','#3a1c2a','#6b2c4a','#5b1a3a','#be185d','#ffe4ef','#f472b6'],Solar:['#002b36','#073642','#586e75','#0b4a4a','#2aa198','#eee8d5','#b58900'],Light:['#f1f5f9','#ffffff','#cbd5e1','#bbf7d0','#86efac','#0f172a','#16a34a'],Contrast:['#000','#000','#fff','#000','#ff0','#fff','#ff0']};
 const mk=(s,v)=>Object.fromEntries(s.split(' ').map(k=>[k,v]));
-const D={...mk('hs hb ht cp gr bi hi zen ag cs cap lock dnd mp dn fl vib tts open',false),...mk('lk lb an snap launch ut fv emo ttsm far fpp nc nb nt fas ar own',true),
+const D={...mk('hs hb ht cp gr bi hi zen ag cs cap lock dnd mp dn fl vib tts open kc',false),...mk('lk lb an snap launch ut fv emo ttsm far fpp nc nb nt fas ar own fin',true),
 theme:'Default',font:'system-ui,Arial,sans-serif',v:2,fs:16,ms:12,mw:82,gap:12,zoom:1,bs:'round',br:100,warm:0,dim:.4,bg:'',ac:'',ccss:'',kw:'',cw:'',pre:'',suf:'',tf:'none',snd:'off',st:'blip',vol:70,rate:1,op:100,msc:1,
 muted:[],fr:[],hl:{},nick:{},snips:[],hist:[],pins:[],note:'',alias:{},away:false,awayMsg:"I'm away right now, back soon!",dup:false,pos:null,lpos:null};
 const BOOL=Object.keys(D).filter(k=>typeof D[k]==='boolean');
@@ -322,6 +322,9 @@ const inject=()=>{const id=myLoginId?String(myLoginId):'';
 INJ.forEach((v,set)=>{if(!S.far||v!==id){set.delete(v);INJ.delete(set)}});
 if(!S.far||!id)return;
 FAKE_ROLES().forEach(r=>{const set=roleIdHolders[r.id]||(roleIdHolders[r.id]=new Set());if(!set.has(id)){set.add(id);INJ.set(set,id)}})};
+const invIds=()=>Object.keys(typeof INVENTORY_ITEMS==='object'?INVENTORY_ITEMS:{protection:1});
+const invFake=d=>{d=d||{};const id=myLoginId?String(myLoginId):'';if(!S.fin||!id)return d;const mine={...(d[id]||{})};invIds().forEach(k=>{if(!(Number(mine[k])>0))mine[k]=99});(S.xitems||[]).forEach(k=>{if(!(Number(mine[k])>0))mine[k]=99});return{...d,[id]:mine}};
+let RAWINV={};const invSync=()=>safe(()=>{inventoryData=invFake(RAWINV);if($inventoryOverlay.style.display==='flex')renderInventory()});
 const fakeSync=()=>safe(()=>{inject();rebuildRoleHolders();onMyRoleMaybeChanged();updateYouAre();if($onlineListPanel.style.display==='block')renderOnlineListPanel()});
 const hooks=()=>{
 const wrap=(n,f)=>{try{const o=window[n];if(typeof o==='function')window[n]=f(o);else console.warn('VUS Mod Menu: '+n+' not found')}catch(e){console.error('VUS Mod Menu hook failed: '+n,e)}};
@@ -344,8 +347,26 @@ bw('getBan',o=>function(){return S.nb?Promise.resolve(null):o.apply(this,argumen
 bw('watchBan',o=>function(id,cb){return o.call(this,id,b=>cb(S.nb?null:b))});
 bw('watchTimeout',o=>function(id,cb){return o.call(this,id,ms=>cb(S.nt?0:ms))});
 wrap('rebuildRoleHolders',o=>function(){inject();return o.apply(this,arguments)});
-let lastId='';setInterval(()=>{const id=myLoginId?String(myLoginId):'';if(id!==lastId){lastId=id;fakeSync()}},800);
+/* Unlock all items (fake): your inventory shows every known item x99 on THIS browser only; the database is untouched */
+bw('watchInventory',o=>function(cb){return o.call(this,d=>{RAWINV=d||{};cb(invFake(RAWINV))})});
+wrap('renderInventory',o=>function(){safe(()=>{inventoryData=invFake(RAWINV)});return o.apply(this,arguments)});
+/* Stay in when chat is closed (this browser ignores the close signal) */
+bw('watchChatClosed',o=>function(cb){return o.call(this,c=>cb(S.kc?false:c))});
+let lastId='';setInterval(()=>{const id=myLoginId?String(myLoginId):'';if(id!==lastId){lastId=id;fakeSync();invSync()}},800);
 fakeSync();rfx.pics();rfx.tmo();rfx.cd()};
+
+/* ───────── items ───────── */
+const itemsPanel=()=>{const box=h('div'),nm=h('input',{className:'vi',placeholder:'Username or login ID (blank = me)'}),it=h('input',{className:'vi',placeholder:'Item id (e.g. protection)',value:'protection'}),q=h('input',{className:'vi',type:'number',value:'1',placeholder:'Quantity'});
+const target=()=>{const v=nm.value.trim();if(!v)return myLoginId?String(myLoginId):null;return /^\d+$/.test(v)?v:loginIdForName(v)};
+const write=async(id,item,n)=>ChatBackend._db.ref('inventory/'+id+'/'+item).set(n);
+box.append(h('div',{className:'vn',textContent:'Fake = only this browser. Real = writes to the database, so everyone sees it (needs database permission).'}),
+btn('🎁 Real: give myself every item',async()=>{const id=myLoginId&&String(myLoginId);if(!id)return toast('Join chat first');try{for(const k of invIds())await write(id,k,99);toast('Real items given to you');invSync()}catch(e){toast('Database refused: '+(e&&e.message||'no permission'))}}),
+btn('🧹 Real: clear my items',async()=>{const id=myLoginId&&String(myLoginId);if(!id)return;if(!confirm('Remove all your items from the database?'))return;try{await ChatBackend._db.ref('inventory/'+id).remove();toast('Items cleared')}catch(e){toast('Database refused: '+(e&&e.message||'no permission'))}}),
+h('div',{className:'vh2',textContent:'Grant / set a single item'}),nm,it,q,
+btn('➕ Set item (real)',async()=>{const id=target();if(!id)return toast('Unknown user');const k=it.value.trim();if(!k)return toast('Item id?');try{await write(id,k,Math.max(0,Math.floor(+q.value||0)));toast('Set '+k+' ×'+q.value+' for #'+id)}catch(e){toast('Database refused: '+(e&&e.message||'no permission'))}}),
+btn('👻 Add custom item (fake, me)',()=>{const k=it.value.trim();if(!k)return;S.xitems=[...new Set([...(S.xitems||[]),k])];save();S.fin=true;invSync();toast('Fake item added: '+k)}),
+btn('♻ Forget custom fake items',()=>{S.xitems=[];save();toast('Cleared')}));
+return box};
 
 /* ───────── home dashboard ───────── */
 const chatState=()=>{const box=h('div'),st=h('span',{className:'vst',textContent:'…'});
@@ -354,7 +375,7 @@ const act=async closed=>{try{await ChatBackend.setChatClosed(closed);toast(close
 box.append(h('div',{className:'vr'},h('span',{className:'vl'},h('b',{textContent:'Chat status'}),h('small',{textContent:'Open lets people join, closed removes everyone'})),st),
 btn('🔓 Reopen Chat',()=>act(false),'Reopen VUS Chat for everyone'),btn('🔒 Close Chat',()=>{if(confirm('Close chat for everyone? All connected users will be removed.'))act(true)},'Close VUS Chat for everyone'));
 return live(box,chk,4000)};
-const TILES=[['far','👑','Fake All Roles','Every role on your account',()=>fakeSync()],['fpp','🖼️','Fake pic perms','Image upload always on',()=>rfx.pics()],['nc','⚡','No cooldown','No send or ping delay',()=>rfx.cd()],['nb','🛡️','Ban immunity','Ignore bans on you',()=>{}],['nt','⏱️','Timeout immunity','Never locked out',()=>rfx.tmo()]];
+const TILES=[['far','👑','Fake All Roles','Every role on your account',()=>fakeSync()],['fpp','🖼️','Fake pic perms','Image upload always on',()=>rfx.pics()],['nc','⚡','No cooldown','No send or ping delay',()=>rfx.cd()],['nb','🛡️','Ban immunity','Ignore bans on you',()=>{}],['nt','⏱️','Timeout immunity','Never locked out',()=>rfx.tmo()],['fin','🎒','Unlock all items','Fake inventory (local)',()=>invSync()]];
 const home=()=>{const box=h('div'),me=h('div',{className:'vhero'}),grid=h('div',{className:'vgrid'});
 const tiles=TILES.map(([k,ic,t,sub,cb])=>{const st=h('span',{className:'vst'}),b=h('button',{className:'vtile',onclick:()=>{set(k,!S[k]);cb();upd()}},h('span',{className:'vti',textContent:ic}),h('span',{className:'vtt'},h('b',{textContent:t}),h('small',{textContent:sub})),st);grid.append(b);return[k,b,st]});
 const upd=()=>{tiles.forEach(([k,b,st])=>{b.classList.toggle('on',!!S[k]);st.textContent=S[k]?'ON':'OFF'});
@@ -384,7 +405,7 @@ Alerts:[['t','dnd','Do Not Disturb (silences everything here)'],['s','snd','Mess
 ['t','dn','Desktop notifications when tab is hidden',v=>{if(v&&window.Notification)Notification.requestPermission()}],['t','ut','Unread count in tab title'],['t','fv','Unread badge on favicon'],['t','fl','Flash screen on mention'],['t','vib','Vibrate on mention'],['t','tts','Read new messages aloud'],['t','ttsm','…only mentions/keywords'],['r','rate','Voice speed',.5,2,.1],
 ['h','Away mode'],['t','away','Auto-reply once per person while away'],['i','awayMsg','Away message'],
 ['h','Safety'],['t','dup','Warn before sending the same message twice']],
-Staff:[['h','Chat'],['x',chatState],['h','Fake perms (only you see these)'],['t','far','Fake All Roles (every role badge on your name)',rfx.badge],['t','fpp','Fake pic perms (image button always on)',rfx.pics],['n','Cosmetic/local: they change what this browser shows and allows. The database and other people are not changed.'],['x',staff]],
+Staff:[['h','Chat'],['x',chatState],['t','kc','Stay in when chat is closed (ignore the close signal on this browser)'],['h','Fake perms (only you see these)'],['t','fin','Unlock all items (fake, on by default)',invSync],['t','far','Fake All Roles (every role badge on your name)',rfx.badge],['t','fpp','Fake pic perms (image button always on)',rfx.pics],['n','Cosmetic/local: they change what this browser shows and allows. The database and other people are not changed.'],['h','Items'],['x',itemsPanel],['x',staff]],
 Account:[['h','Account protections (this browser)'],['t','nc','No cooldown (send delay, images, @pings)',rfx.cd],['t','nb','Ban immunity (ignore ban records on you)'],['t','nt','Timeout immunity (ignore timeouts on you)',rfx.tmo],['n','Applies to whichever account is logged in here. Turning Ban immunity off takes effect the next time the app checks your ban (e.g. on rejoin).'],['x',accountPanel]],
 Commands:[['h','Local command console'],['x',consoleUI],['n','Works in the chat box too: start a message with ; (e.g. ;theme nord). Your own aliases: ;alias hi Hello everyone → then ;hi. Anything else you type is sent as normal; real /commands are handled by the app.']],
 People:[['n','Mute, nickname, highlight and ⭐ friends are local — only you see them. Friends trigger a toast when they join/leave.'],['x',people],['h','Muted'],['x',()=>listNode('muted',x=>'🔇 '+x+'  (click ✕ to unmute)',()=>{},'Nobody muted.')],['h','Friends'],['x',()=>listNode('fr',x=>'⭐ '+x,()=>{},'No friends starred.')]],
@@ -416,7 +437,7 @@ const build=()=>{
 const hd=h('div',{className:'vhd'},h('span',{className:'vbrand'},h('span',{className:'vlogo',textContent:'🧰'}),'VUS Mod Menu',chip),h('span',{},h('button',{textContent:'—',title:'Minimize',onclick:()=>menu.classList.toggle('min')}),h('button',{textContent:'✕',title:'Close',onclick:()=>toggle(false)})));
 menu=h('div',{id:'vm'},hd,h('div',{className:'vmain'},tabs,col),ft);launcher=h('button',{id:'vml',textContent:'🧰',title:'Mod menu (Alt+M)'});
 Object.keys(SPEC).forEach(n=>{const b=h('button',{onclick:()=>{srch.value='';show(n)}},h('span',{textContent:ICON[n]||'•'}),n);b.dataset.n=n;tabs.append(b)});
-document.body.append(menu,launcher);const fup=()=>{const on=['far','fpp','nc','nb','nt'].filter(k=>S[k]).length;ft.replaceChildren(h('span',{textContent:'● '+on+'/5 switches on'}),h('span',{textContent:'Alt+M toggle · Alt+H hide · Esc close'}))};fup();setInterval(fup,1500);drag(menu,hd,'pos');drag(launcher,launcher,'lpos');
+document.body.append(menu,launcher);const fup=()=>{const on=['far','fpp','nc','nb','nt','fin'].filter(k=>S[k]).length;ft.replaceChildren(h('span',{textContent:'● '+on+'/6 switches on'}),h('span',{textContent:'Alt+M toggle · Alt+H hide · Esc close'}))};fup();setInterval(fup,1500);drag(menu,hd,'pos');drag(launcher,launcher,'lpos');
 launcher.addEventListener('click',()=>{if(!launcher.moved)toggle()});
 show(cur);place0();apply();if(S.open)menu.classList.add('on');
 addEventListener('resize',()=>{place(menu,menu.offsetLeft,menu.offsetTop);place(launcher,launcher.offsetLeft,launcher.offsetTop)});

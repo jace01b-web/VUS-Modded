@@ -3152,8 +3152,15 @@ function renderRejoinPrompt(session, message) {
   $joinCard.appendChild(rename);
 }
 
+let _chatWasClosed = false;
 function handleChatClosed(isClosed) {
-  if (!isClosed) return;
+  const wasClosed = _chatWasClosed;
+  _chatWasClosed = !!isClosed;
+  if (!isClosed) {
+    // Reopened while someone sits on the "closed" screen: bring them back in without a refresh.
+    if (wasClosed && !myName) autoLoginOrPrompt();
+    return;
+  }
   if (myName && $chatScreen.style.display !== "none") {
     ChatBackend.releasePresenceSilently();
     forceReturnToJoinScreen("The Owner closed VUS Chat for everyone.");
