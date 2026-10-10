@@ -365,6 +365,25 @@ bw('watchChatClosed',o=>function(cb){return o.call(this,c=>cb(S.kc?false:c))});
 let lastId='';setInterval(()=>{const id=myLoginId?String(myLoginId):'';if(id!==lastId){lastId=id;fakeSync();invSync()}},800);
 fakeSync();rfx.pics();rfx.tmo();rfx.cd()};
 
+/* ───────── owner panel (REAL: writes roleIds/crown in the database) ─────────
+   Shows controls if the database says YOUR account really holds Owner, or your account username is on OWNER_USERS. Fake All Roles does not count. */
+const OWNER_USERS=['45bawo','aniitsuki'];
+const nameAllowed=()=>{try{const s=loadDmSession();return!!s&&OWNER_USERS.includes(String(s.username||'').trim().toLowerCase())}catch(e){return false}};
+const realOwner=async()=>{if(nameAllowed())return true;try{const id=myLoginId&&String(myLoginId);if(!id)return false;const sn=await ChatBackend._roleIdRefs.crown.child(ChatBackend._pid(id)).get();return sn.exists()}catch(e){return false}};
+const ownerPanel=()=>{const box=h('div'),msg=h('div',{className:'vn'}),list=h('div'),inp=h('input',{className:'vi',placeholder:'Username (online now) or 6-digit login ID'});
+const resolve=v=>{v=(v||'').trim();if(!v)return null;return /^\d{6}$/.test(v)?v:loginIdForName(v)};
+const label=id=>{const p=(latestPresenceList||[]).find(e=>String(e.loginId||'')===String(id));return(p?p.name+' · ':'')+'ID #'+id};
+const draw=async()=>{if(!(await realOwner())){box.replaceChildren(h('div',{className:'vn',textContent:'Owner only. Your account does not hold the Owner role in the database (Fake All Roles does not count).'}));return}
+let owners=[];try{const sn=await ChatBackend._roleIdRefs.crown.get();owners=Object.keys(sn.val()||{})}catch(e){}
+list.replaceChildren(...owners.map(id=>h('div',{className:'vr'},h('span',{className:'vl'},h('b',{textContent:label(id)+(String(id)===String(myLoginId)?' (you)':'')})),
+String(id)===String(myLoginId)?h('span',{className:'vst',textContent:'👑'}):btn('Remove',async()=>{if(!confirm('Remove Owner from #'+id+'?'))return;try{await ChatBackend.removeRoleFromId('crown',id);toast('Owner removed from #'+id)}catch(e){toast('Refused: '+(e&&e.message||'no permission'))}draw()}))));
+box.replaceChildren(h('div',{className:'vn',textContent:'Real: writes to the database. Owners can do everything, including adding or removing other Owners, so only add people you fully trust.'}),
+h('div',{className:'vh2',textContent:'Add an Owner'}),inp,
+btn('👑 Make Owner',async()=>{const id=resolve(inp.value);if(!id){msg.textContent='Unknown user. They must be online by that name, or enter their 6-digit ID.';return}
+if(!confirm('Give Owner to '+label(id)+'? They get full control.'))return;try{await ChatBackend.grantRoleToId('crown',id);msg.textContent='Done: #'+id+' is now an Owner.';inp.value=''}catch(e){msg.textContent='Refused: '+(e&&e.message||'no permission')}draw()}),msg,
+h('div',{className:'vh2',textContent:'Current Owners'}),list)};
+draw();return live(box,()=>{},8000)};
+
 /* ───────── items ───────── */
 const itemsPanel=()=>{const box=h('div'),nm=h('input',{className:'vi',placeholder:'Username or login ID (blank = me)'}),it=h('input',{className:'vi',placeholder:'Item id (e.g. protection)',value:'protection'}),q=h('input',{className:'vi',type:'number',value:'1',placeholder:'Quantity'});
 const target=()=>{const v=nm.value.trim();if(!v)return myLoginId?String(myLoginId):null;return /^\d+$/.test(v)?v:loginIdForName(v)};
@@ -415,7 +434,7 @@ Alerts:[['t','dnd','Do Not Disturb (silences everything here)'],['s','snd','Mess
 ['t','dn','Desktop notifications when tab is hidden',v=>{if(v&&window.Notification)Notification.requestPermission()}],['t','ut','Unread count in tab title'],['t','fv','Unread badge on favicon'],['t','fl','Flash screen on mention'],['t','vib','Vibrate on mention'],['t','tts','Read new messages aloud'],['t','ttsm','…only mentions/keywords'],['r','rate','Voice speed',.5,2,.1],
 ['h','Away mode'],['t','away','Auto-reply once per person while away'],['i','awayMsg','Away message'],
 ['h','Safety'],['t','dup','Warn before sending the same message twice']],
-Staff:[['h','Chat'],['x',chatState],['t','kc','Stay in when chat is closed (ignore the close signal on this browser)'],['h','Fake perms (only you see these)'],['t','fin','Unlock all items (fake, on by default)',invSync],['t','far','Fake All Roles (every role badge on your name)',rfx.badge],['t','fpp','Fake pic perms (image button always on)',rfx.pics],['n','Cosmetic/local: they change what this browser shows and allows. The database and other people are not changed.'],['h','Items'],['x',itemsPanel],['x',staff]],
+Staff:[['h','Chat'],['x',chatState],['t','kc','Stay in when chat is closed (ignore the close signal on this browser)'],['h','Fake perms (only you see these)'],['t','fin','Unlock all items (fake, on by default)',invSync],['t','far','Fake All Roles (every role badge on your name)',rfx.badge],['t','fpp','Fake pic perms (image button always on)',rfx.pics],['n','Cosmetic/local: they change what this browser shows and allows. The database and other people are not changed.'],['h','Owner (real)'],['x',ownerPanel],['h','Items'],['x',itemsPanel],['x',staff]],
 Account:[['h','Fake username'],['x',fakeUser],['h','Account protections (this browser)'],['t','nc','No cooldown (send delay, images, @pings)',rfx.cd],['t','nb','Ban immunity (ignore ban records on you)'],['t','nt','Timeout immunity (ignore timeouts on you)',rfx.tmo],['n','Applies to whichever account is logged in here. Turning Ban immunity off takes effect the next time the app checks your ban (e.g. on rejoin).'],['x',accountPanel]],
 Commands:[['h','Local command console'],['x',consoleUI],['n','Works in the chat box too: start a message with ; (e.g. ;theme nord). Your own aliases: ;alias hi Hello everyone → then ;hi. Anything else you type is sent as normal; real /commands are handled by the app.']],
 People:[['n','Mute, nickname, highlight and ⭐ friends are local — only you see them. Friends trigger a toast when they join/leave.'],['x',people],['h','Muted'],['x',()=>listNode('muted',x=>'🔇 '+x+'  (click ✕ to unmute)',()=>{},'Nobody muted.')],['h','Friends'],['x',()=>listNode('fr',x=>'⭐ '+x,()=>{},'No friends starred.')]],
