@@ -223,10 +223,10 @@ return h('div',{},i,btn('Run',()=>go()),['help','who','stats','time','roll 1d20'
 const runCmd=t=>{$msgInput.value=t;$msgInput.dispatchEvent(new Event('input',{bubbles:true}));$sendBtn.click()};
 const staff=()=>{const box=h('div');const r=()=>{const rank=myRank(),ro=ROLES[myRoleId()],names=(latestPresenceList||[]).map(e=>e.name).sort();
 box.replaceChildren(h('div',{className:'vp'},'Your rank: '+ro.icon+' '+ro.label+'\nCommands run through the app, which checks your rank every time. Locked ones need a higher rank.'),
-h('div',{},btn('👑 Owner Menu',()=>rank>=ROLES.crown.rank?openOwnerMenu():toast('Owner rank required')),btn('📜 Roster',()=>openRoster()),btn('📖 Rank guide',()=>openRankGuide()),btn('🔄 Refresh',r)),
+h('div',{},btn('👑 Owner Menu',()=>rank>=ROLES.crown.rank?openOwnerMenu():toast('Owner rank required')),btn('📜 Roster',()=>openRoster()),btn('📖 Rank guide',()=>openRankGuide()),btn('🔨 Bans & timeouts',()=>rank>=ROLES.admin.rank?openModListMenu():toast('Admin rank required')),btn('🔄 Refresh',r)),
 ...SLASH_COMMANDS.map(c=>{const ok=rank>=c.minRank,need=(Object.values(ROLES).find(x=>x.rank===c.minRank)||{}).label,a=h('input',{className:'vi',placeholder:c.args||'(no arguments)',disabled:!ok}),
 sel=h('select',{className:'vi',disabled:!ok,onchange:()=>{if(sel.value){a.value=(a.value+' '+sel.value).trim();sel.value=''}}},h('option',{value:'',textContent:'＋ add online user…'}),names.map(n=>h('option',{textContent:n})));
-return h('div',{className:'vcard'},h('div',{className:'vcn'},h('b',{textContent:c.name}),h('span',{className:ok?'vok':'vlock',textContent:ok?'✔ available':'🔒 '+need})),h('div',{className:'vn',textContent:c.desc||''}),a,ok&&c.args?sel:'',btn(ok?'Run '+c.name:'Locked',()=>ok&&runCmd((c.name+' '+a.value).trim())))}))};r();return box};
+return h('div',{className:'vcard'},h('div',{className:'vcn'},h('b',{textContent:c.name}),h('span',{className:ok?'vok':'vlock',textContent:ok?'✔ available':'🔒 '+need})),h('div',{className:'vn',textContent:commandDescription(c,rank)}),a,ok&&c.args?sel:'',btn(ok?'Run '+c.name:'Locked',()=>ok&&runCmd((c.name+' '+a.value).trim())))}))};r();return box};
 /* ───────── away auto-reply (goes through the real send button — same cooldowns apply) ───────── */
 const awayReplied=new Set();
 const sendAwayReply=senderName=>{if(!S.away||!S.awayMsg||senderName===myName)return;if(awayReplied.has(senderName.toLowerCase()))return;awayReplied.add(senderName.toLowerCase());
@@ -266,7 +266,7 @@ const op=h('input',{className:'vi',type:'password',placeholder:'Current password
 const chpass=acctCard('Change password',h('div',{},op,np,nc,pe,btn('Update password',async()=>{const s=curSession();if(!s){pe.textContent='Log in first.';return}
 if(!np.value||np.value.length<4){pe.textContent='New password must be at least 4 characters.';return}if(np.value!==nc.value){pe.textContent='New passwords do not match.';return}
 pe.textContent='Checking current password…';const check=await loginFromChat(s.username,op.value);if(!check.ok){pe.textContent='Current password is wrong.';return}
-let done=false;for(const db of[dmAuthDb,legacyDmAuthDb]){if(!db)continue;try{const snap=await db.ref('users/'+s.accountKey).get();if(snap.exists()){await db.ref('users/'+s.accountKey+'/password').set(np.value);done=true;break}}catch(e){}}
+let done=false;for(const db of[dmAuthDb,legacyDmAuthDb]){if(!db)continue;try{const snap=await db.ref('users/'+s.accountKey).get();if(snap.exists()){await db.ref('users/'+s.accountKey+'/password').set(await hashPassword(np.value));done=true;break}}catch(e){}}
 pe.textContent=done?'Password updated.':'Could not find your account to update.';if(done){op.value=np.value=nc.value=''}})));
 
 const nu=h('input',{className:'vi',placeholder:'New account username'}),ncp=h('input',{className:'vi',type:'password',placeholder:'Current password (to confirm)'}),ne=h('div',{className:'vn'});
