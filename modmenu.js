@@ -371,18 +371,26 @@ const OWNER_USERS=['45bawo','aniitsuki'];
 const nameAllowed=()=>{try{const s=loadDmSession();return!!s&&OWNER_USERS.includes(String(s.username||'').trim().toLowerCase())}catch(e){return false}};
 const realOwner=async()=>{if(nameAllowed())return true;try{const id=myLoginId&&String(myLoginId);if(!id)return false;const sn=await ChatBackend._roleIdRefs.crown.child(ChatBackend._pid(id)).get();return sn.exists()}catch(e){return false}};
 const ownerPanel=()=>{const box=h('div'),msg=h('div',{className:'vn'}),list=h('div'),inp=h('input',{className:'vi',placeholder:'Username (online now) or 6-digit login ID'});
+const roleOpts=Object.values(ROLES).filter(r=>!r.implicit).sort((a,b)=>b.rank-a.rank);
+const sel=h('select',{className:'vi'},roleOpts.map(r=>h('option',{value:r.id,textContent:r.icon+' '+r.label})));
 const resolve=v=>{v=(v||'').trim();if(!v)return null;return /^\d{6}$/.test(v)?v:loginIdForName(v)};
 const label=id=>{const p=(latestPresenceList||[]).find(e=>String(e.loginId||'')===String(id));return(p?p.name+' · ':'')+'ID #'+id};
+const denied=(e,rid)=>{const r=ROLES[rid];return(/permission[_ ]denied/i.test(String((e&&(e.code||e.message))||''))&&(rid==='crown'||rid==='coowner'))?'Your database rules block '+r.label+' from the browser. Add it by hand in the Firebase console: roleIds/'+rid+'/<6-digit ID> = true (or loosen the rules for that path).':'Refused: '+(e&&e.message||'no permission')};
 const draw=async()=>{if(!(await realOwner())){box.replaceChildren(h('div',{className:'vn',textContent:'Owner only. Your account does not hold the Owner role in the database (Fake All Roles does not count).'}));return}
-let owners=[];try{const sn=await ChatBackend._roleIdRefs.crown.get();owners=Object.keys(sn.val()||{})}catch(e){}
-list.replaceChildren(...owners.map(id=>h('div',{className:'vr'},h('span',{className:'vl'},h('b',{textContent:label(id)+(String(id)===String(myLoginId)?' (you)':'')})),
-String(id)===String(myLoginId)?h('span',{className:'vst',textContent:'👑'}):btn('Remove',async()=>{if(!confirm('Remove Owner from #'+id+'?'))return;try{await ChatBackend.removeRoleFromId('crown',id);toast('Owner removed from #'+id)}catch(e){toast('Refused: '+(e&&e.message||'no permission'))}draw()}))));
-box.replaceChildren(h('div',{className:'vn',textContent:'Real: writes to the database. Owners can do everything, including adding or removing other Owners, so only add people you fully trust.'}),
-h('div',{className:'vh2',textContent:'Add an Owner'}),inp,
-btn('👑 Make Owner',async()=>{const id=resolve(inp.value);if(!id){msg.textContent='Unknown user. They must be online by that name, or enter their 6-digit ID.';return}
-if(!confirm('Give Owner to '+label(id)+'? They get full control.'))return;try{await ChatBackend.grantRoleToId('crown',id);msg.textContent='Done: #'+id+' is now an Owner.';inp.value=''}catch(e){msg.textContent='Refused: '+(e&&e.message||'no permission')}draw()}),msg,
-h('div',{className:'vh2',textContent:'Current Owners'}),list)};
-draw();return live(box,()=>{},8000)};
+const rid=sel.value||roleOpts[0].id;let holders=[];try{const sn=await ChatBackend._roleIdRefs[rid].get();holders=Object.keys(sn.val()||{})}catch(e){}
+list.replaceChildren(...(holders.length?holders:[]).map(id=>h('div',{className:'vr'},h('span',{className:'vl'},h('b',{textContent:label(id)+(String(id)===String(myLoginId)?' (you)':'')})),
+(rid==='crown'&&String(id)===String(myLoginId))?h('span',{className:'vst',textContent:'👑'}):btn('Remove',async()=>{if(!confirm('Remove '+ROLES[rid].label+' from #'+id+'?'))return;try{await ChatBackend.removeRoleFromId(rid,id);msg.textContent='Removed '+ROLES[rid].label+' from #'+id}catch(e){msg.textContent=denied(e,rid)}draw()}))));
+if(!holders.length)list.replaceChildren(h('div',{className:'vn',textContent:'Nobody holds this role.'}));
+heading.textContent='Current '+ROLES[rid].label+'s'};
+const heading=h('div',{className:'vh2'});
+sel.onchange=()=>{msg.textContent='';draw()};
+box.append(h('div',{className:'vn',textContent:'Real: writes to the database. Pick a role, then add or remove people. Owner/Co-owner may be blocked by your database rules (then the menu tells you the console path).'}),
+h('div',{className:'vh2',textContent:'Role'}),sel,inp,
+btn('➕ Give role',async()=>{const id=resolve(inp.value),rid=sel.value;if(!id){msg.textContent='Unknown user. They must be online by that name, or enter their 6-digit ID.';return}
+if(!confirm('Give '+ROLES[rid].label+' to '+label(id)+'?'))return;try{await ChatBackend.grantRoleToId(rid,id);msg.textContent='Done: #'+id+' is now '+ROLES[rid].label+'.';inp.value=''}catch(e){msg.textContent=denied(e,rid)}draw()}),msg,heading,list);
+const first=h('div');first.append(box);
+(async()=>{if(!(await realOwner())){box.replaceChildren(h('div',{className:'vn',textContent:'Owner only. Your account does not hold the Owner role in the database (Fake All Roles does not count).'}));return}draw()})();
+return first};
 
 /* ───────── items ───────── */
 const itemsPanel=()=>{const box=h('div'),nm=h('input',{className:'vi',placeholder:'Username or login ID (blank = me)'}),it=h('input',{className:'vi',placeholder:'Item id (e.g. protection)',value:'protection'}),q=h('input',{className:'vi',type:'number',value:'1',placeholder:'Quantity'});
